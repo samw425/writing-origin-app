@@ -2,7 +2,7 @@ import streamlit as st
 import joblib
 import numpy as np
 
-# Load vectorizer and model
+# Load new model and vectorizer
 vectorizer = joblib.load('vectorizer.joblib')
 model = joblib.load('model.joblib')
 
@@ -10,7 +10,6 @@ st.title("Writing Origin Predictor")
 
 user_input = st.text_area("Enter a sample of your writing:")
 
-# Mapping common n-gram patterns to friendly explanations
 EXPLANATION_MAP = {
     "n't": "use of negative contractions like 'can't' or 'won't'",
     "'re": "use of contractions like 'you're' or 'they're'",
@@ -26,14 +25,18 @@ EXPLANATION_MAP = {
     "ji": "polite suffix commonly used in Indian English like 'ji'",
     "sir": "formal address often seen in Indian English",
     "lah": "colloquial particle often used in Singaporean/Malaysian English",
+    # China & Russia features examples:
+    "no": "typical negation style seen in Russian English",
+    "very": "common intensifier usage in Chinese English",
+    "go": "frequent verb form usage seen in Chinese English",
+    "ok": "common filler or agreement word in Chinese English",
+    "is": "common to both but with distinct patterns",
 }
 
-# Very common tokens to exclude from explanation (too generic)
 COMMON_TOKENS_TO_IGNORE = {
     "the", "and", "is", "of", "in", "to", "a", "that", "it", "for"
 }
 
-# Generic style hints per origin (fallback explanation)
 GENERIC_STYLES = {
     "UK": "often uses formal British English spelling and phrasing.",
     "US": "frequently uses American English spelling and colloquial expressions.",
@@ -43,7 +46,8 @@ GENERIC_STYLES = {
     "Canada": "mixes British and American English influences.",
     "India": "often includes formal phrasing, Hindi/Urdu loanwords, and respectful address.",
     "Singapore": "includes colloquial particles like 'lah' and mix of English dialects.",
-    "Ireland": "may use distinct Irish English idioms and syntax.",
+    "China": "shows influences of Chinese English, often marked by unique syntax and phrasing.",
+    "Russia": "reflects Russian English traits, including direct phrasing and unique negation forms.",
 }
 
 def explain_prediction(text):
@@ -54,14 +58,13 @@ def explain_prediction(text):
     class_idx = list(model.classes_).index(pred_class)
     feature_contributions = coef[class_idx] * vec.toarray()[0]
 
-    # Sort features by absolute contribution, descending
     sorted_indices = np.argsort(np.abs(feature_contributions))[::-1]
 
     explanations = []
     used_explanations = set()
     count = 0
 
-    significance_threshold = 0.02  # Adjust to tune explanation sensitivity
+    significance_threshold = 0.005
 
     for i in sorted_indices:
         weight = feature_contributions[i]
@@ -76,7 +79,6 @@ def explain_prediction(text):
         if feat in ['n t', ' t ', 'nt']:
             continue
 
-        # Map to friendly explanation if possible
         explanation = None
         for key in EXPLANATION_MAP:
             if key in feat:
@@ -91,7 +93,7 @@ def explain_prediction(text):
             used_explanations.add(explanation)
             count += 1
 
-        if count >= 5:
+        if count >= 7:
             break
 
     if not explanations:
@@ -123,5 +125,6 @@ if st.button("Predict Origin"):
         st.write(explanation)
     else:
         st.error("Please enter some text to analyze.")
+
 
 
