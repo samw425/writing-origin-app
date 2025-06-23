@@ -25,36 +25,55 @@ def explain_prediction(input_text, top_features=5):
     # Get main prediction
     main_prediction = top_preds[0][0]
     
-    # Analyze n-grams
-    input_ngrams = vectorizer.transform([input_text])
+    # Get n-gram features contributing to that class
     feature_names = np.array(vectorizer.get_feature_names_out())
+    input_indices = input_vec.nonzero()[1]
     coef = model.coef_[list(classes).index(main_prediction)]
-    top_features_idx = input_ngrams.nonzero()[1]
-    top_features_weights = coef[top_features_idx]
+    weights = coef[input_indices]
     
-    top_n_idx = np.argsort(top_features_weights)[::-1][:top_features]
-    contributing_patterns = feature_names[top_features_idx[top_n_idx]]
+    # Get top character patterns
+    top_n_idx = np.argsort(weights)[::-1][:top_features]
+    top_patterns = feature_names[input_indices[top_n_idx]]
     
-    return main_prediction, top_preds, contributing_patterns
+    # Convert patterns into readable interpretation
+    natural_phrases = []
+    for p in top_patterns:
+        if len(p.strip()) < 2:
+            continue
+        elif "n't" in p or "'t" in p:
+            natural_phrases.append("use of contractions like 'don't' or 'isn't'")
+        elif p.startswith("th"):
+            natural_phrases.append("frequent use of 'th' patterns, common in English articles and pronouns")
+        elif p.startswith("is ") or p.startswith(" is"):
+            natural_phrases.append("structured sentence openings like 'It is', 'This is'")
+        elif p.endswith(" a"):
+            natural_phrases.append("phrase endings like 'is a' or 'was a'")
+        elif p.strip().isalpha() and len(p) > 3:
+            natural_phrases.append(f"use of the pattern '{p}'")
+    
+    if not natural_phrases:
+        explanation = f"The text is predicted to be from {main_prediction}, but no clear stylistic cues were strongly detected."
+    else:
+        explanation = f"The text is predicted to be from {main_prediction}. This is based on stylistic features such as: " + ", ".join(natural_phrases[:top_features]) + "."
+
+    return main_prediction, top_preds, explanation
 
 if st.button("Predict Origin"):
     if user_input.strip():
-        prediction, top_preds, patterns = explain_prediction(user_input)
+        prediction, top_preds, explanation = explain_prediction(user_input)
 
         st.success(f"Predicted Origin: {prediction}")
 
-        # Show Top 3 likely predictions
+        # Show Top 3 predictions
         st.markdown("**Top 3 Prediction Confidence Scores:**")
         for region, score in top_preds:
             st.markdown(f"- **{region}**: {score:.2f}%")
 
-        # Explanation
+        # Show human-style explanation
         st.markdown("**Why this prediction?**")
-        if patterns.size > 0:
-            pattern_text = ", ".join([f"'{p}'" for p in patterns])
-            st.write(f"The text is predicted to be from {prediction}. This is because it shows writing features such as: {pattern_text}.")
-        else:
-            st.write(f"The text is predicted to be from {prediction}, but no distinctive writing patterns were detected.")
+        st.write(explanation)
+
     else:
         st.error("Please enter some text to analyze.")
+
 
