@@ -23,6 +23,8 @@ def explain_prediction(text):
 
     explanations = []
     count = 0
+    generic_ngrams = ['the', 'and', 'ing', 'ion', 'to', 'in', 'of', 'is']
+
     for i in sorted_indices:
         weight = feature_contributions[i]
         if abs(weight) < 0.01:
@@ -32,7 +34,6 @@ def explain_prediction(text):
         feat = features[i]
         
         # Skip very generic/common features that add no info
-        generic_ngrams = ['the', 'and', 'ing', 'ion', 'to', 'in', 'of', 'is']
         if any(g in feat for g in generic_ngrams):
             continue
         
@@ -65,8 +66,5 @@ if st.button("Predict Origin"):
         explanation = explain_prediction(user_input)
         st.success(f"Predicted Origin: {prediction}")
         st.write(explanation)
-    else:
-        st.error("Please enter some text to analyze.")
-
     else:
         st.error("Please enter some text to analyze.")
