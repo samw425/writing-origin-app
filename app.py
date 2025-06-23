@@ -23,30 +23,41 @@ def explain_prediction(text, model, vectorizer, top_n=5):
     # Map common n-grams to plain English explanations
     explanation_map = {
         "we": "use of inclusive pronouns like 'we'",
-        "n't": "frequent use of contractions (e.g., 'don't', 'can't')",
-        "'t": "common negation patterns",
-        "in": "typical use of prepositions",
-        "the": "usage of the definite article",
-        "you": "direct address to the reader",
-        "g'day": "informal greeting common in Australian English",
+        "n't": "frequent use of contractions such as 'don't' and 'can't'",
+        "t": "common negation patterns (like 'can't', 'won't')",
+        "in": "typical use of prepositions like 'in'",
+        "the": "usage of the definite article 'the'",
+        "you": "direct address to the reader using 'you'",
+        "gday": "informal greeting common in Australian English",
         "mate": "friendly term often used in British and Australian English",
-        "y'all": "colloquial plural you common in Southern US English",
-        "barbecue": "cultural reference typical in Southern US",
-        # Add more mappings as needed for your data
+        "yall": "colloquial plural 'you' common in Southern US English",
+        "barbecue": "cultural reference typical in Southern US English",
+        # Add more mappings here if needed
     }
 
+    seen = set()
     explanations = []
     for feat, val in top_features:
-        # Clean n-gram from spaces and apostrophes for matching keys
-        clean_feat = feat.strip().replace("'", "").lower()
+        # Normalize feature for matching
+        clean_feat = feat.strip().replace("'", "").replace(" ", "").lower()
+        if clean_feat in seen:
+            continue
+        seen.add(clean_feat)
         plain = explanation_map.get(clean_feat, f"usage of the pattern '{feat.strip()}'")
         explanations.append(plain)
 
-    explanation_text = (
-        f"The text shows features common to writing from {prediction}, such as "
-        + ", ".join(explanations)
-        + "."
-    )
+    # Build a natural sentence explanation
+    if explanations:
+        explanation_text = (
+            f"The text shows features common to writing from {prediction}, including "
+            + ", ".join(explanations[:-1])
+            + (", and " if len(explanations) > 1 else "")
+            + explanations[-1]
+            + "."
+        )
+    else:
+        explanation_text = f"The text shows features common to writing from {prediction}."
+
     return explanation_text
 
 st.title("Writing Origin Predictor with Plain English Explanation")
@@ -63,4 +74,3 @@ if st.button("Analyze"):
         st.text_area("Why this prediction?", explanation, height=150)
     else:
         st.error("Please enter some text to analyze.")
-
