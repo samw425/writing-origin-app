@@ -10,42 +10,52 @@ st.title("Writing Origin Predictor")
 
 user_input = st.text_area("Enter a sample of your writing:")
 
+def generate_explanation(coef, feature_names, top_n=5):
+    # Get indices of top positive features for the predicted class
+    top_indices = np.argsort(coef)[-top_n:]
+    top_features = [feature_names[i] for i in reversed(top_indices)]
+    return top_features
+
 if st.button("Predict Origin"):
-    if user_input.strip():
+    if not user_input.strip():
+        st.error("Please enter some text to analyze.")
+    else:
+        # Vectorize input and predict
         input_vec = vectorizer.transform([user_input])
-        pred = model.predict(input_vec)[0]
-        pred_proba = model.predict_proba(input_vec)[0]
+        prediction = model.predict(input_vec)[0]
+        probs = model.predict_proba(input_vec)[0]
 
-        # Sort indices by probability descending
-        sorted_idx = np.argsort(pred_proba)[::-1]
-        top_idx = sorted_idx[0]
-        second_idx = sorted_idx[1]
+        classes = model.classes_
+        predicted_index = list(classes).index(prediction)
 
-        top_origin = model.classes_[top_idx]
-        second_origin = model.classes_[second_idx]
-        top_conf = pred_proba[top_idx]
-        second_conf = pred_proba[second_idx]
+        # Find secondary origin if close confidence (within 8% of main)
+        sorted_indices = np.argsort(probs)[::-1]
+        primary_idx = sorted_indices[0]
+        secondary_idx = sorted_indices[1]
 
-        # Get top weighted features for explanation
-        coefs = model.coef_[top_idx]
+        primary_confidence = probs[primary_idx]
+        secondary_confidence = probs[secondary_idx]
+
+        # Prepare explanation features for predicted class
+        coef = model.coef_[primary_idx]
         feature_names = vectorizer.get_feature_names_out()
-        input_vec_array = input_vec.toarray()[0]
-        
-        # Find n-grams present in input with top weights
-        present_features = [(feature_names[i], coefs[i]) for i in range(len(coefs)) if input_vec_array[i] > 0]
-        # Sort by weight descending
-        present_features.sort(key=lambda x: abs(x[1]), reverse=True)
-        top_features = [f"'{feat[0]}'" for feat in present_features[:5]]
+        top_features = generate_explanation(coef, feature_names, top_n=6)
 
-        explanation = f"This prediction is based on writing features such as: {', '.join(top_features)}."
+        # Build explanation text
+        explanation = (
+            f"The writing style shows key features such as: {', '.join(top_features)}."
+        )
 
-        st.success(f"Predicted Origin: {top_origin}")
+        st.markdown(f"### Predicted Origin: {prediction}")
+
+        if secondary_confidence >= primary_confidence - 0.08:
+            secondary_origin = classes[secondary_idx]
+            st.markdown(
+                f"**Possible secondary origin:** {secondary_origin} — "
+                "due to overlapping writing features."
+            )
+        else:
+            secondary_origin = None
 
         st.markdown("### Why this prediction?")
         st.write(explanation)
-
-        # Show possible secondary if close confidence (within 10% absolute difference)
-        if (top_conf - second_conf) < 0.1:
-            st.markdown(f"**Possible secondary origin:** {second_origin} — due to overlapping writing features.")
-    else:
-        st.error("Please enter some text to analyze.")
