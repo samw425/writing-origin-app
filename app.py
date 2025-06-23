@@ -2,68 +2,69 @@ import streamlit as st
 import joblib
 import numpy as np
 
-# Load model and vectorizer
-vectorizer = joblib.load('vectorizer.joblib')
-model = joblib.load('model.joblib')
+# Load the model and vectorizer
+model = joblib.load("model.joblib")
+vectorizer = joblib.load("vectorizer.joblib")
 
-st.title("Writing Origin Predictor")
+# Helper: Translate n-grams into plain English explanations
+def explain_ngrams(ngrams):
+    explanations = []
+    for gram in ngrams:
+        if "is a" in gram:
+            explanations.append("frequent use of formal phrases like 'this is a...'")
+        elif "s a" in gram:
+            explanations.append("use of linking structures such as 'it's a...'")
+        elif "a t" in gram:
+            explanations.append("structured phrasing like 'at the...'")
+        elif "s i" in gram:
+            explanations.append("phrasing like 'is in...' or similar")
+        elif "the" in gram:
+            explanations.append("frequent use of the article 'the'")
+        elif "ing" in gram:
+            explanations.append("use of continuous tense verbs ending in -ing")
+        elif "n't" in gram or " not" in gram:
+            explanations.append("contractions or negation patterns like 'don't', 'not going'")
+        elif "you" in gram:
+            explanations.append("direct address or conversational tone using 'you'")
+        elif "mate" in gram:
+            explanations.append("informal British or Australian tone using words like 'mate'")
+        else:
+            explanations.append(f"common stylistic pattern '{gram.strip()}'")
+    return explanations[:3]
 
-user_input = st.text_area("Enter a sample of your writing:")
+st.title("🌍 Writing Origin Analyzer")
 
-def explain_prediction(input_text, top_features=5):
-    # Vectorize input
-    input_vec = vectorizer.transform([input_text])
-    
-    # Predict probabilities
-    probs = model.predict_proba(input_vec)[0]
-    classes = model.classes_
-    
-    # Sort predictions by confidence
-    sorted_indices = np.argsort(probs)[::-1]
-    top_index = sorted_indices[0]
-    second_index = sorted_indices[1]
-    
-    top_pred = (classes[top_index], probs[top_index]*100)
-    second_pred = (classes[second_index], probs[second_index]*100)
-    
-    # Feature explanation
-    input_ngrams = input_vec.nonzero()[1]
-    feature_names = np.array(vectorizer.get_feature_names_out())
-    top_class_idx = list(classes).index(top_pred[0])
-    top_coef = model.coef_[top_class_idx]
-    
-    top_features_idx = input_ngrams
-    top_weights = top_coef[top_features_idx]
-    
-    top_n_idx = np.argsort(top_weights)[::-1][:top_features]
-    contributing_patterns = feature_names[top_features_idx[top_n_idx]]
-    
-    return top_pred, second_pred, contributing_patterns
-
-def build_explanation(main, backup, patterns):
-    pred_region, pred_conf = main
-    backup_region, backup_conf = backup
-    
-    explanation = f"**Predicted Origin: {pred_region}**\n\n"
-    
-    if pred_conf > backup_conf * 1.5:
-        explanation += "The model is confident in this prediction.\n\n"
-    else:
-        explanation += f"The model leans toward this prediction, but there are writing features also present in {backup_region}.\n\n"
-    
-    if len(patterns) > 0:
-        feature_phrase = ", ".join([f"'{p}'" for p in patterns])
-        explanation += f"This is based on stylistic features such as: {feature_phrase}."
-    else:
-        explanation += "However, no distinctive writing features were strong enough to explain this clearly."
-    
-    return explanation
+user_input = st.text_area("Enter a sample of your writing:", height=200)
 
 if st.button("Predict Origin"):
     if user_input.strip():
-        top_pred, second_pred, patterns = explain_prediction(user_input)
-        explanation = build_explanation(top_pred, second_pred, patterns)
-        st.markdown(explanation)
+        # Vectorize and predict
+        input_vec = vectorizer.transform([user_input])
+        prediction = model.predict(input_vec)[0]
+        probs = model.predict_proba(input_vec)[0]
+        class_labels = model.classes_
+        sorted_indices = np.argsort(probs)[::-1]
+        top_indices = sorted_indices[:3]
+        
+        # Show main prediction
+        st.subheader(f"Predicted Origin: {prediction}")
+        
+        # Top 3 Confidence Scores
+        st.markdown("**Top 3 Prediction Confidence Scores:**")
+        for idx in top_indices:
+            st.write(f"{class_labels[idx]}: {probs[idx]*100:.2f}%")
+        
+        # Explanation
+        st.markdown("### Why this prediction?")
+        top_ngrams = input_vec @ vectorizer.transform(vectorizer.get_feature_names_out()).T
+        top_ngrams = vectorizer.get_feature_names_out()[np.argsort(top_ngrams.toarray()[0])[::-1][:5]]
+        explanation_lines = explain_ngrams(top_ngrams)
+        
+        if explanation_lines:
+            st.write("The model is confident in this prediction based on:")
+            for line in explanation_lines:
+                st.write(f"- {line}")
+        else:
+            st.write("The model found patterns typical of this region, but could not determine clear stylistic features.")
     else:
         st.error("Please enter some text to analyze.")
-
