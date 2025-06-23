@@ -10,7 +10,7 @@ st.title("Writing Origin Predictor")
 
 user_input = st.text_area("Enter a sample of your writing:")
 
-# Map n-grams to user-friendly explanations (expand as needed)
+# Mapping common n-gram patterns to friendly explanations
 EXPLANATION_MAP = {
     "n't": "use of negative contractions like 'can't' or 'won't'",
     "'re": "use of contractions like 'you're' or 'they're'",
@@ -22,14 +22,18 @@ EXPLANATION_MAP = {
     "ing": "frequent use of '-ing' verb forms",
     " th": "common letter pattern as in 'that', 'this', 'the'",
     " fo": "common word starts like 'for' or 'from'",
+    "bhai": "usage of informal Indian terms like 'bhai'",
+    "ji": "polite suffix commonly used in Indian English like 'ji'",
+    "sir": "formal address often seen in Indian English",
+    "lah": "colloquial particle often used in Singaporean/Malaysian English",
 }
 
-# Ultra common words to ignore in explanation
+# Very common tokens to exclude from explanation (too generic)
 COMMON_TOKENS_TO_IGNORE = {
     "the", "and", "is", "of", "in", "to", "a", "that", "it", "for"
 }
 
-# Generic style hints per region
+# Generic style hints per origin (fallback explanation)
 GENERIC_STYLES = {
     "UK": "often uses formal British English spelling and phrasing.",
     "US": "frequently uses American English spelling and colloquial expressions.",
@@ -37,6 +41,9 @@ GENERIC_STYLES = {
     "Spain": "shows influences of Spanish syntax or English as a second language.",
     "Japan": "reflects indirect phrasing or English influenced by Japanese grammar.",
     "Canada": "mixes British and American English influences.",
+    "India": "often includes formal phrasing, Hindi/Urdu loanwords, and respectful address.",
+    "Singapore": "includes colloquial particles like 'lah' and mix of English dialects.",
+    "Ireland": "may use distinct Irish English idioms and syntax.",
 }
 
 def explain_prediction(text):
@@ -54,7 +61,7 @@ def explain_prediction(text):
     used_explanations = set()
     count = 0
 
-    significance_threshold = 0.02  # Filter out low-impact features
+    significance_threshold = 0.02  # Adjust to tune explanation sensitivity
 
     for i in sorted_indices:
         weight = feature_contributions[i]
@@ -77,7 +84,6 @@ def explain_prediction(text):
                 break
 
         if explanation is None:
-            # Format fallback explanations nicely
             explanation = f"usage of the pattern '{feat}'"
 
         if explanation not in used_explanations:
@@ -102,11 +108,20 @@ def explain_prediction(text):
 
 if st.button("Predict Origin"):
     if user_input.strip():
-        prediction = model.predict(vectorizer.transform([user_input]))[0]
-        explanation = explain_prediction(user_input)
+        vec = vectorizer.transform([user_input])
+        preds = model.predict(vec)
+        probs = model.predict_proba(vec)[0]
+        prediction = preds[0]
+
         st.success(f"Predicted Origin: {prediction}")
+        st.markdown("### Prediction confidence scores:")
+        for cls, prob in zip(model.classes_, probs):
+            st.write(f"{cls}: {prob:.2%}")
+
+        explanation = explain_prediction(user_input)
         st.markdown("### Why this prediction?")
         st.write(explanation)
     else:
         st.error("Please enter some text to analyze.")
+
 
