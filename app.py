@@ -36,25 +36,31 @@ def explain_prediction(input_text, top_features=5):
     top_patterns = feature_names[input_indices[top_n_idx]]
     
     # Convert patterns into readable interpretation
-    natural_phrases = []
+    natural_phrases = set()
     for p in top_patterns:
         if len(p.strip()) < 2:
             continue
         elif "n't" in p or "'t" in p:
-            natural_phrases.append("use of contractions like 'don't' or 'isn't'")
+            natural_phrases.add("use of contractions like 'don't' or 'isn't'")
         elif p.startswith("th"):
-            natural_phrases.append("frequent use of 'th' patterns, common in English articles and pronouns")
-        elif p.startswith("is ") or p.startswith(" is"):
-            natural_phrases.append("structured sentence openings like 'It is', 'This is'")
-        elif p.endswith(" a"):
-            natural_phrases.append("phrase endings like 'is a' or 'was a'")
+            natural_phrases.add("frequent use of 'th' patterns, common in English articles and pronouns")
+        elif p.startswith("is ") or p.startswith(" is") or " is " in p:
+            natural_phrases.add("structured sentence openings like 'It is', 'This is'")
+        elif p.endswith(" a") or " is a" in p:
+            natural_phrases.add("phrase endings like 'is a' or 'was a'")
         elif p.strip().isalpha() and len(p) > 3:
-            natural_phrases.append(f"use of the pattern '{p}'")
-    
+            natural_phrases.add(f"use of the pattern '{p}'")
+
+    natural_phrases = list(natural_phrases)
+
     if not natural_phrases:
         explanation = f"The text is predicted to be from {main_prediction}, but no clear stylistic cues were strongly detected."
     else:
-        explanation = f"The text is predicted to be from {main_prediction}. This is based on stylistic features such as: " + ", ".join(natural_phrases[:top_features]) + "."
+        explanation = (
+            f"The text is predicted to be from {main_prediction}. "
+            f"This is based on stylistic features such as: "
+            + ", ".join(natural_phrases[:top_features]) + "."
+        )
 
     return main_prediction, top_preds, explanation
 
@@ -75,5 +81,4 @@ if st.button("Predict Origin"):
 
     else:
         st.error("Please enter some text to analyze.")
-
 
