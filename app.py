@@ -10,77 +10,64 @@ st.title("Writing Origin Predictor")
 
 user_input = st.text_area("Enter a sample of your writing:")
 
-def get_feature_explanations(input_vec, model, vectorizer, top_n=5):
-    """
-    Extract top character n-grams contributing to prediction for explanation.
-    Returns list of human-friendly patterns.
-    """
-    feature_names = np.array(vectorizer.get_feature_names_out())
+def explain_features(text, vectorizer, model, top_n=5):
+    vec = vectorizer.transform([text])
     coefs = model.coef_
     classes = model.classes_
 
-    # Predict probabilities and get top class index
-    pred_probs = model.predict_proba(input_vec)[0]
-    pred_class_idx = np.argmax(pred_probs)
-    
-    # Get the coefficient vector for predicted class
-    class_coefs = coefs[pred_class_idx]
+    pred_idx = model.predict(vec)[0]
+    class_idx = list(classes).index(pred_idx)
 
-    # Find non-zero features in input vector
-    input_indices = input_vec.indices
+    feature_names = vectorizer.get_feature_names_out()
+    # Get the feature vector for this text (sparse)
+    input_vector = vec.toarray()[0]
 
-    # Get the coefficients for features present in input
-    present_coefs = class_coefs[input_indices]
+    # Multiply feature vector by coef weights for predicted class
+    feature_weights = input_vector * coefs[class_idx]
 
-    # Pair feature names with coef weights
-    feature_contribs = list(zip(feature_names[input_indices], present_coefs))
+    # Get top weighted features (indices)
+    top_indices = feature_weights.argsort()[-top_n:][::-1]
 
-    # Sort by absolute contribution descending
-    feature_contribs.sort(key=lambda x: abs(x[1]), reverse=True)
-
-    # Take top_n and format nicely
-    top_features = [f"'{feat}'" for feat, weight in feature_contribs[:top_n]]
-
-    return top_features
+    features = []
+    for idx in top_indices:
+        if input_vector[idx] > 0:
+            features.append(feature_names[idx])
+    return features
 
 if st.button("Predict Origin"):
     if user_input.strip():
         input_vec = vectorizer.transform([user_input])
         pred = model.predict(input_vec)[0]
-        pred_probs = model.predict_proba(input_vec)[0]
+        pred_proba = model.predict_proba(input_vec)[0]
 
-        # Sort predictions by probability descending
-        sorted_indices = np.argsort(pred_probs)[::-1]
-        top_idx = sorted_indices[0]
-        second_idx = sorted_indices[1]
+        classes = model.classes_
+        class_probs = dict(zip(classes, pred_proba))
 
-        top_origin = model.classes_[top_idx]
-        top_confidence = pred_probs[top_idx] * 100
-        second_origin = model.classes_[second_idx]
-        second_confidence = pred_probs[second_idx] * 100
+        # Sort classes by confidence
+        sorted_probs = sorted(class_probs.items(), key=lambda x: x[1], reverse=True)
 
-        # Get feature explanations for top prediction
-        explanations = get_feature_explanations(input_vec, model, vectorizer, top_n=5)
+        main_pred, main_conf = sorted_probs[0]
+        second_pred, second_conf = sorted_probs[1]
 
-        st.success(f"Predicted Origin: {top_origin}")
-        st.markdown(f"**Confidence:** {top_confidence:.2f}%")
+        # Explanation of features
+        features = explain_features(user_input, vectorizer, model)
 
-        explanation_text = (
-            f"The model is confident in this prediction based on stylistic features such as: "
-            + ", ".join(explanations)
-            + "."
-        )
-        st.write(explanation_text)
+        st.success(f"Predicted Origin: {main_pred}")
 
-        # Show backup prediction only if confidence is reasonably close (say within 10%)
-        confidence_gap = top_confidence - second_confidence
-        if confidence_gap < 10:
-            st.markdown(f"---")
-            st.write(
-                f"**Possible secondary origin:** {second_origin} ({second_confidence:.2f}%) "
-                f"— due to some overlapping writing features."
-            )
+        # Confidence threshold to show secondary prediction (e.g., within 10% of main confidence)
+        threshold = 0.10
+
+        st.markdown(f"**Prediction confidence:** {main_conf*100:.2f}%")
+
+        if features:
+            feat_list = ", ".join(f"'{f}'" for f in features)
+            st.markdown(f"**Why this prediction?**\nThis prediction is based on writing features such as: {feat_list}.")
+        else:
+            st.markdown("**Why this prediction?**\nThe model identified patterns typical for this origin.")
+
+        # Show second choice only if close enough confidence
+        if (main_conf - second_conf) <= threshold:
+            st.markdown(f"**Possible secondary origin:** {second_pred} ({second_conf*100:.2f}%) — due to overlapping writing features.")
+
     else:
-        st.error("Please enter some text to analyze.")
-
         st.error("Please enter some text to analyze.")
