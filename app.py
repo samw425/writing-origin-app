@@ -10,7 +10,7 @@ st.title("Writing Origin Predictor")
 
 user_input = st.text_area("Enter a sample of your writing:")
 
-# Map n-grams to user-friendly explanations (expandable)
+# Map n-grams to user-friendly explanations (expand as needed)
 EXPLANATION_MAP = {
     "n't": "use of negative contractions like 'can't' or 'won't'",
     "'re": "use of contractions like 'you're' or 'they're'",
@@ -20,17 +20,16 @@ EXPLANATION_MAP = {
     "ya": "casual speech like 'ya' instead of 'you'",
     " u ": "direct address pronouns like 'you'",
     "ing": "frequent use of '-ing' verb forms",
-    "the": "use of the definite article 'the'",
-    " and": "use of conjunction 'and'",
-    " of ": "common preposition 'of'",
-    " in ": "common preposition 'in'",
-    " is ": "use of the verb 'is'",
-    " to ": "infinitive marker 'to'",
     " th": "common letter pattern as in 'that', 'this', 'the'",
     " fo": "common word starts like 'for' or 'from'",
 }
 
-# Generic style hints per region if no strong features found
+# Ultra common words to ignore in explanation
+COMMON_TOKENS_TO_IGNORE = {
+    "the", "and", "is", "of", "in", "to", "a", "that", "it", "for"
+}
+
+# Generic style hints per region
 GENERIC_STYLES = {
     "UK": "often uses formal British English spelling and phrasing.",
     "US": "frequently uses American English spelling and colloquial expressions.",
@@ -48,24 +47,24 @@ def explain_prediction(text):
     class_idx = list(model.classes_).index(pred_class)
     feature_contributions = coef[class_idx] * vec.toarray()[0]
 
-    # Sort by absolute contribution descending
+    # Sort features by absolute contribution, descending
     sorted_indices = np.argsort(np.abs(feature_contributions))[::-1]
 
     explanations = []
     used_explanations = set()
     count = 0
 
-    significance_threshold = 0.01  # Raise threshold to filter noise
+    significance_threshold = 0.02  # Filter out low-impact features
 
     for i in sorted_indices:
         weight = feature_contributions[i]
         if abs(weight) < significance_threshold:
             continue
 
-        feat = features[i].lower()
-
-        # Skip meaningless very short fragments or single letters
-        if len(feat.strip()) < 2:
+        feat = features[i].lower().strip()
+        if feat in COMMON_TOKENS_TO_IGNORE:
+            continue
+        if len(feat) < 2:
             continue
         if feat in ['n t', ' t ', 'nt']:
             continue
@@ -78,7 +77,7 @@ def explain_prediction(text):
                 break
 
         if explanation is None:
-            # Format patterns more naturally: e.g. 'usage of pattern "xyz"'
+            # Format fallback explanations nicely
             explanation = f"usage of the pattern '{feat}'"
 
         if explanation not in used_explanations:
