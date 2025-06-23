@@ -11,74 +11,59 @@ st.title("Writing Origin Predictor")
 user_input = st.text_area("Enter a sample of your writing:")
 
 def explain_prediction(input_text, top_features=5):
-    # Vectorize the input
+    # Vectorize input
     input_vec = vectorizer.transform([input_text])
     
     # Predict probabilities
     probs = model.predict_proba(input_vec)[0]
     classes = model.classes_
     
-    # Get top 3 predictions
-    top_indices = np.argsort(probs)[::-1][:3]
-    top_preds = [(classes[i], probs[i]*100) for i in top_indices]
+    # Sort predictions by confidence
+    sorted_indices = np.argsort(probs)[::-1]
+    top_index = sorted_indices[0]
+    second_index = sorted_indices[1]
     
-    # Get main prediction
-    main_prediction = top_preds[0][0]
+    top_pred = (classes[top_index], probs[top_index]*100)
+    second_pred = (classes[second_index], probs[second_index]*100)
     
-    # Get n-gram features contributing to that class
+    # Feature explanation
+    input_ngrams = input_vec.nonzero()[1]
     feature_names = np.array(vectorizer.get_feature_names_out())
-    input_indices = input_vec.nonzero()[1]
-    coef = model.coef_[list(classes).index(main_prediction)]
-    weights = coef[input_indices]
+    top_class_idx = list(classes).index(top_pred[0])
+    top_coef = model.coef_[top_class_idx]
     
-    # Get top character patterns
-    top_n_idx = np.argsort(weights)[::-1][:top_features]
-    top_patterns = feature_names[input_indices[top_n_idx]]
+    top_features_idx = input_ngrams
+    top_weights = top_coef[top_features_idx]
     
-    # Convert patterns into readable interpretation
-    natural_phrases = set()
-    for p in top_patterns:
-        if len(p.strip()) < 2:
-            continue
-        elif "n't" in p or "'t" in p:
-            natural_phrases.add("use of contractions like 'don't' or 'isn't'")
-        elif p.startswith("th"):
-            natural_phrases.add("frequent use of 'th' patterns, common in English articles and pronouns")
-        elif p.startswith("is ") or p.startswith(" is") or " is " in p:
-            natural_phrases.add("structured sentence openings like 'It is', 'This is'")
-        elif p.endswith(" a") or " is a" in p:
-            natural_phrases.add("phrase endings like 'is a' or 'was a'")
-        elif p.strip().isalpha() and len(p) > 3:
-            natural_phrases.add(f"use of the pattern '{p}'")
+    top_n_idx = np.argsort(top_weights)[::-1][:top_features]
+    contributing_patterns = feature_names[top_features_idx[top_n_idx]]
+    
+    return top_pred, second_pred, contributing_patterns
 
-    natural_phrases = list(natural_phrases)
-
-    if not natural_phrases:
-        explanation = f"The text is predicted to be from {main_prediction}, but no clear stylistic cues were strongly detected."
+def build_explanation(main, backup, patterns):
+    pred_region, pred_conf = main
+    backup_region, backup_conf = backup
+    
+    explanation = f"**Predicted Origin: {pred_region}**\n\n"
+    
+    if pred_conf > backup_conf * 1.5:
+        explanation += "The model is confident in this prediction.\n\n"
     else:
-        explanation = (
-            f"The text is predicted to be from {main_prediction}. "
-            f"This is based on stylistic features such as: "
-            + ", ".join(natural_phrases[:top_features]) + "."
-        )
-
-    return main_prediction, top_preds, explanation
+        explanation += f"The model leans toward this prediction, but there are writing features also present in {backup_region}.\n\n"
+    
+    if len(patterns) > 0:
+        feature_phrase = ", ".join([f"'{p}'" for p in patterns])
+        explanation += f"This is based on stylistic features such as: {feature_phrase}."
+    else:
+        explanation += "However, no distinctive writing features were strong enough to explain this clearly."
+    
+    return explanation
 
 if st.button("Predict Origin"):
     if user_input.strip():
-        prediction, top_preds, explanation = explain_prediction(user_input)
-
-        st.success(f"Predicted Origin: {prediction}")
-
-        # Show Top 3 predictions
-        st.markdown("**Top 3 Prediction Confidence Scores:**")
-        for region, score in top_preds:
-            st.markdown(f"- **{region}**: {score:.2f}%")
-
-        # Show human-style explanation
-        st.markdown("**Why this prediction?**")
-        st.write(explanation)
-
+        top_pred, second_pred, patterns = explain_prediction(user_input)
+        explanation = build_explanation(top_pred, second_pred, patterns)
+        st.markdown(explanation)
     else:
         st.error("Please enter some text to analyze.")
 
