@@ -6,7 +6,7 @@ import numpy as np
 vectorizer = joblib.load('vectorizer.joblib')
 model = joblib.load('model.joblib')
 
-def explain_prediction(text, model, vectorizer, top_n=5):
+def explain_prediction(text, model, vectorizer, top_n=7, min_contribution=0.01):
     vec = vectorizer.transform([text])
     coefs = model.coef_
     classes = model.classes_
@@ -17,64 +17,88 @@ def explain_prediction(text, model, vectorizer, top_n=5):
     text_vec = vec.toarray()[0]
     contributions = coefs[class_idx] * text_vec
 
-    top_indices = np.argsort(contributions)[-top_n:][::-1]
-    top_features = [(feature_names[i], contributions[i]) for i in top_indices if contributions[i] > 0]
+    # Filter features: contribution above threshold & length 3 to 5 (typical ngram range)
+    filtered = [
+        (feature_names[i], contributions[i]) 
+        for i in range(len(contributions))
+        if contributions[i] > min_contribution and 3 <= len(feature_names[i].strip()) <= 5
+    ]
 
-    # Explanation map for meaningful n-grams
+    # Sort descending by contribution
+    filtered_sorted = sorted(filtered, key=lambda x: x[1], reverse=True)[:top_n]
+
+    # Expanded explanation map with more region- and syntax-specific patterns
     explanation_map = {
         "we": "use of inclusive pronouns like 'we'",
-        "n't": "frequent use of contractions such as 'don't' and 'can't'",
-        "can't": "common negation contractions like 'can't'",
-        "won't": "common negation contractions like 'won't'",
-        "the": "usage of the definite article 'the'",
-        "you": "direct address to the reader using 'you'",
-        "g'day": "informal greeting common in Australian English",
-        "mate": "friendly term often used in British and Australian English",
-        "y'all": "colloquial plural 'you' common in Southern US English",
-        "barbecue": "cultural reference typical in Southern US English",
-        " in ": "typical use of the preposition 'in'",
-        " is ": "usage of the verb 'is'",
-        # add more as needed
+        "n't": "contractions like 'don't' and 'can't'",
+        "ain't": "informal negations like 'ain't'",
+        "g'day": "Australian informal greeting 'g'day'",
+        "mate": "friendly term used in UK/Australia 'mate'",
+        "y'all": "Southern US colloquial plural 'y'all'",
+        "barbecue": "Southern US cultural reference 'barbecue'",
+        "colour": "British English spelling of 'colour'",
+        "sushi": "cultural reference common in Japan",
+        "football": "sports term used in UK and other English-speaking countries",
+        "cheers": "informal British/Australian expression for thanks or goodbye",
+        "loo": "British slang for bathroom",
+        "bloody": "British intensifier used for emphasis",
+        "gotta": "informal contraction 'got to' common in American English",
+        "gonna": "informal contraction 'going to'",
+        "matey": "friendly British slang similar to 'mate'",
+        "youse": "plural you, common in some dialects",
+        # Add more as you find them
     }
 
-    seen = set()
     explanations = []
-
-    for feat, val in top_features:
+    seen = set()
+    for feat, val in filtered_sorted:
         clean_feat = feat.strip().replace("'", "").replace(" ", "").lower()
-
-        # Skip short or meaningless ngrams
-        if len(clean_feat) < 3:
+        if clean_feat in seen:
             continue
-
-        # Attempt to match explanation map by checking for keys contained in the feature
+        seen.add(clean_feat)
         matched = False
         for key in explanation_map:
             if key.replace(" ", "") in clean_feat:
-                if key not in seen:
-                    explanations.append(explanation_map[key])
-                    seen.add(key)
+                explanations.append(explanation_map[key])
                 matched = True
                 break
-        if not matched and feat.strip() not in seen:
-            # Optionally skip unknown patterns or include generic description
-            # explanations.append(f"usage of pattern '{feat.strip()}'")
-            pass
+        # skip unknown patterns to keep explanation clean
 
+    # Build explanation text
     if explanations:
         explanation_text = (
-            f"The text shows features common to writing from {prediction}, including "
+            f"The writing strongly reflects features common to {prediction}, including "
             + ", ".join(explanations[:-1])
             + (", and " if len(explanations) > 1 else "")
             + explanations[-1]
             + "."
         )
     else:
-        explanation_text = f"The text shows features common to writing from {prediction}."
+        explanation_text = f"The writing reflects features common to {prediction}."
+
+    confidence = contributions.sum()
+    explanation_text += (
+        f"\n\nConfidence score: {confidence:.3f} (higher means stronger match)."
+    )
+
+    # Add a high-level summary about writing style tendencies
+    if confidence > 0.1:
+        explanation_text += (
+            "\n\nThis suggests a distinctive and consistent writing style "
+            "matching that origin."
+        )
+    elif confidence > 0.05:
+        explanation_text += (
+            "\n\nThe writing shows some markers of this origin, but also mixed elements."
+        )
+    else:
+        explanation_text += (
+            "\n\nThe writing shows only weak markers of this origin and may be inconclusive."
+        )
 
     return explanation_text
 
-st.title("Writing Origin Predictor with Plain English Explanation")
+st.title("Writing Origin Predictor — Advanced Syntax & Style Analysis")
 
 user_input = st.text_area("Enter a sample of your writing:")
 
@@ -85,6 +109,6 @@ if st.button("Analyze"):
         st.success(f"Predicted Origin: {prediction}")
 
         explanation = explain_prediction(user_input, model, vectorizer)
-        st.text_area("Why this prediction?", explanation, height=150)
+        st.text_area("Why this prediction?", explanation, height=220)
     else:
         st.error("Please enter some text to analyze.")
