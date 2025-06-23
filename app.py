@@ -20,33 +20,47 @@ def explain_prediction(text, model, vectorizer, top_n=5):
     top_indices = np.argsort(contributions)[-top_n:][::-1]
     top_features = [(feature_names[i], contributions[i]) for i in top_indices if contributions[i] > 0]
 
-    # Map common n-grams to plain English explanations
+    # Explanation map for meaningful n-grams
     explanation_map = {
         "we": "use of inclusive pronouns like 'we'",
         "n't": "frequent use of contractions such as 'don't' and 'can't'",
-        "t": "common negation patterns (like 'can't', 'won't')",
-        "in": "typical use of prepositions like 'in'",
+        "can't": "common negation contractions like 'can't'",
+        "won't": "common negation contractions like 'won't'",
         "the": "usage of the definite article 'the'",
         "you": "direct address to the reader using 'you'",
-        "gday": "informal greeting common in Australian English",
+        "g'day": "informal greeting common in Australian English",
         "mate": "friendly term often used in British and Australian English",
-        "yall": "colloquial plural 'you' common in Southern US English",
+        "y'all": "colloquial plural 'you' common in Southern US English",
         "barbecue": "cultural reference typical in Southern US English",
-        # Add more mappings here if needed
+        " in ": "typical use of the preposition 'in'",
+        " is ": "usage of the verb 'is'",
+        # add more as needed
     }
 
     seen = set()
     explanations = []
-    for feat, val in top_features:
-        # Normalize feature for matching
-        clean_feat = feat.strip().replace("'", "").replace(" ", "").lower()
-        if clean_feat in seen:
-            continue
-        seen.add(clean_feat)
-        plain = explanation_map.get(clean_feat, f"usage of the pattern '{feat.strip()}'")
-        explanations.append(plain)
 
-    # Build a natural sentence explanation
+    for feat, val in top_features:
+        clean_feat = feat.strip().replace("'", "").replace(" ", "").lower()
+
+        # Skip short or meaningless ngrams
+        if len(clean_feat) < 3:
+            continue
+
+        # Attempt to match explanation map by checking for keys contained in the feature
+        matched = False
+        for key in explanation_map:
+            if key.replace(" ", "") in clean_feat:
+                if key not in seen:
+                    explanations.append(explanation_map[key])
+                    seen.add(key)
+                matched = True
+                break
+        if not matched and feat.strip() not in seen:
+            # Optionally skip unknown patterns or include generic description
+            # explanations.append(f"usage of pattern '{feat.strip()}'")
+            pass
+
     if explanations:
         explanation_text = (
             f"The text shows features common to writing from {prediction}, including "
